@@ -1,5 +1,5 @@
 # create new conda environment
-conda create -n dhcp
+conda create -n dhcp python=3.10
 conda activate dhcp
 
 # install pytorch
