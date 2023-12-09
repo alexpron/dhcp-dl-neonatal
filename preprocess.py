@@ -16,7 +16,7 @@ from utils.io import (
     Logging,
     save_numpy_to_nifti,
     save_gifti_surface)
-import pymeshlab
+# import pymeshlab
 
 
 
@@ -52,27 +52,27 @@ def split_data(orig_dir, save_dir, seed=12345):
                 
                 
                 
-def remesh(vert, face, n_target=160000):
-    # compute target edge length
-    edge = np.concatenate([
-        face[:,[0,1]], face[:,[1,2]], face[:,[2,0]]], axis=0).T
-    edge_len = np.sqrt(((vert[edge[0]] - vert[edge[1]])**2).sum(-1)).mean()
-    target_len = edge_len * np.sqrt(vert.shape[0] / n_target)
-
-    # remesh the surface
-    m = pymeshlab.Mesh(vert, face)
-    ms = pymeshlab.MeshSet()
-    ms.add_mesh(m)
-    ms.meshing_isotropic_explicit_remeshing(
-        iterations=5, adaptive=False, checksurfdist=False,
-        targetlen=pymeshlab.AbsoluteValue(target_len))
-
-    vert_remesh = ms[0].vertex_matrix()
-    face_remesh = ms[0].face_matrix()
-    
-    print("num of vertices before/after: {} / {}".format(
-        vert.shape[0], vert_remesh.shape[0]))
-    return vert_remesh, face_remesh
+#def remesh(vert, face, n_target=160000):
+#    # compute target edge length
+#    edge = np.concatenate([
+#        face[:,[0,1]], face[:,[1,2]], face[:,[2,0]]], axis=0).T
+#    edge_len = np.sqrt(((vert[edge[0]] - vert[edge[1]])**2).sum(-1)).mean()
+#    target_len = edge_len * np.sqrt(vert.shape[0] / n_target)
+#
+#    # remesh the surface
+#    m = pymeshlab.Mesh(vert, face)
+#    ms = pymeshlab.MeshSet()
+#    ms.add_mesh(m)
+#    ms.meshing_isotropic_explicit_remeshing(
+#        iterations=5, adaptive=False, checksurfdist=False,
+#        targetlen=pymeshlab.AbsoluteValue(target_len))
+#
+#    vert_remesh = ms[0].vertex_matrix()
+#    face_remesh = ms[0].face_matrix()
+#    
+#    print("num of vertices before/after: {} / {}".format(
+#        vert.shape[0], vert_remesh.shape[0]))
+#    return vert_remesh, face_remesh
     
     
 
@@ -187,7 +187,8 @@ def process_data(orig_dir, save_dir):
                     surf = nib.load(surf_orig_dir)
                     vert = surf.agg_data('pointset')
                     face = surf.agg_data('triangle')
-                    vert_150k, face_150k = remesh(vert, face)
+                    # mesh are no longer resampled to same number of vertices
+                    vert_150k, face_150k = vert, face
                     save_gifti_surface(
                         vert_150k, face_150k,
                         save_dir=surf_save_dir[:-9]+'_150k.surf.gii',
