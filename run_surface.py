@@ -44,149 +44,157 @@ from utils.metric import (
 )
 
 
-# ============ load hyperparameters ============
-parser = argparse.ArgumentParser(description="dHCP DL Neonatal Pipeline")
-parser.add_argument(
-    "--in_dir", default="./in_dir/", type=str, help="Diectory containing input images."
-)
-parser.add_argument(
-    "--out_dir",
-    default="./out_dir/",
-    type=str,
-    help="Directory for saving the output of the pipeline.",
-)
-parser.add_argument(
-    "--T2", default="_T2w.nii.gz", type=str, help="Suffix of T2 image file."
-)
-parser.add_argument(
-    "--T1", default="_T1w.nii.gz", type=str, help="Suffix of T1 image file."
-)
-parser.add_argument(
-    "--device",
-    default="cuda",
-    type=str,
-    help="Device for running the pipeline: [cuda, cpu]",
-)
-parser.add_argument(
-    "--verbose", action="store_true", help="Print debugging information."
-)
-args = parser.parse_args()
-
-in_dir = args.in_dir
-out_dir = args.out_dir
-t2_suffix = args.T2
-t1_suffix = args.T1
-device = args.device
-verbose = args.verbose
-max_regist_iter = 5
-min_regist_dice = 0.9
-
-
-# ============ load nn model ============
-# brain extraction
-# nn_seg_brain = UNet(
-#     C_in=1, C_hid=[16,32,32,32,32], C_out=1).to(device)
-# # ribbon segmentation
-# nn_seg_ribbon = UNet(
-#     C_in=1, C_hid=[16,32,64,128,128], C_out=1).to(device)
-#
-# nn_seg_brain.load_state_dict(
-#     torch.load('./seg/model/model_seg_brain.pt', map_location=device))
-# nn_seg_ribbon.load_state_dict(
-#     torch.load('./seg/model/model_seg_ribbon.pt', map_location=device))
-
-# surface reconstruction
-nn_surf_left_wm = SurfDeform(
-    C_hid=[8, 16, 32, 64, 128, 128], C_in=1, sigma=1.0, device=device
-)
-nn_surf_right_wm = SurfDeform(
-    C_hid=[8, 16, 32, 64, 128, 128], C_in=1, sigma=1.0, device=device
-)
-# nn_surf_left_pial = SurfDeform(
-#     C_hid=[8,16,32,32,32,32], C_in=1, sigma=1.0, device=device)
-# nn_surf_right_pial = SurfDeform(
-#     C_hid=[8,16,32,32,32,32], C_in=1, sigma=1.0, device=device)
-
-nn_surf_left_wm.load_state_dict(
-    torch.load("./surface/model/model_hemi-left_wm.pt", map_location=device)
-)
-nn_surf_right_wm.load_state_dict(
-    torch.load("./surface/model/model_hemi-right_wm.pt", map_location=device)
-)
-# nn_surf_left_pial.load_state_dict(
-#     torch.load('./surface/model/model_hemi-left_pial.pt', map_location=device))
-# nn_surf_right_pial.load_state_dict(
-#     torch.load('./surface/model/model_hemi-right_pial.pt', map_location=device))
-
-# spherical projection
-# nn_sphere_left = SphereDeform(
-#     C_in=6, C_hid=[32, 64, 128, 256, 256], device=device)
-# nn_sphere_right = SphereDeform(
-#     C_in=6, C_hid=[32, 64, 128, 256, 256], device=device)
-#
-# nn_sphere_left.load_state_dict(
-#     torch.load('./sphere/model/model_hemi-left_sphere.pt', map_location=device))
-# nn_sphere_right.load_state_dict(
-#     torch.load('./sphere/model/model_hemi-right_sphere.pt', map_location=device))
-
-
-# ============ load image atlas ============
-img_t2_atlas_ants = ants.image_read("./template/dhcp_week-40_template_T2w.nii.gz")
-# both ants->nibabel and nibabel->ants need to reload the nifiti file
-# so here simply load the image again
-affine_t2_atlas = nib.load("./template/dhcp_week-40_template_T2w.nii.gz").affine
-
-
-# ============ load input surface ============
-surf_left_in = nib.load("./template/dhcp_week-40_hemi-left_init.surf.gii")
-vert_left_in = surf_left_in.agg_data("pointset")
-face_left_in = surf_left_in.agg_data("triangle")
-vert_left_in = apply_affine_mat(vert_left_in, np.linalg.inv(affine_t2_atlas))
-vert_left_in = vert_left_in - [64, 0, 0]
-face_left_in = face_left_in[:, [2, 1, 0]]
-vert_left_in = torch.Tensor(vert_left_in[None]).to(device)
-face_left_in = torch.LongTensor(face_left_in[None]).to(device)
-
-surf_right_in = nib.load("./template/dhcp_week-40_hemi-right_init.surf.gii")
-vert_right_in = surf_right_in.agg_data("pointset")
-face_right_in = surf_right_in.agg_data("triangle")
-vert_right_in = apply_affine_mat(vert_right_in, np.linalg.inv(affine_t2_atlas))
-face_right_in = face_right_in[:, [2, 1, 0]]
-vert_right_in = torch.Tensor(vert_right_in[None]).to(device)
-face_right_in = torch.LongTensor(face_right_in[None]).to(device)
-
-
-# ============ load input sphere ============
-sphere_left_in = nib.load("./template/dhcp_week-40_hemi-left_sphere.surf.gii")
-vert_sphere_left_in = sphere_left_in.agg_data("pointset")
-vert_sphere_left_in = torch.Tensor(vert_sphere_left_in[None]).to(device)
-
-sphere_right_in = nib.load("./template/dhcp_week-40_hemi-right_sphere.surf.gii")
-vert_sphere_right_in = sphere_right_in.agg_data("pointset")
-vert_sphere_right_in = torch.Tensor(vert_sphere_right_in[None]).to(device)
-
-
-# ============ load template sphere (160k) ============
-sphere_160k = nib.load("./template/sphere_163842.surf.gii")
-vert_sphere_160k = sphere_160k.agg_data("pointset")
-face_160k = sphere_160k.agg_data("triangle")
-vert_sphere_160k = torch.Tensor(vert_sphere_160k[None]).to(device)
-face_160k = torch.LongTensor(face_160k[None]).to(device)
-
-
-# ============ load pre-computed barycentric coordinates ============
-# for sphere interpolation
-barycentric_left = nib.load("./template/dhcp_week-40_hemi-left_barycentric.gii")
-bc_coord_left = barycentric_left.agg_data("pointset")
-face_left_id = barycentric_left.agg_data("triangle")
-
-barycentric_right = nib.load("./template/dhcp_week-40_hemi-right_barycentric.gii")
-bc_coord_right = barycentric_right.agg_data("pointset")
-face_right_id = barycentric_right.agg_data("triangle")
 
 
 # ============ dHCP DL-based neonatal pipeline ============
+
+
 if __name__ == "__main__":
+
+    # ============ load hyperparameters ============
+    parser = argparse.ArgumentParser(description="dHCP DL Neonatal Pipeline")
+    parser.add_argument(
+        "--in_dir", default="./in_dir/", type=str,
+        help="Diectory containing input images."
+    )
+    parser.add_argument(
+        "--out_dir",
+        default="./out_dir/",
+        type=str,
+        help="Directory for saving the output of the pipeline.",
+    )
+    parser.add_argument(
+        "--T2", default="restore_T2w.nii.gz", type=str, help="Suffix of T2 "
+                                                            "image file."
+    )
+    parser.add_argument(
+        "--T1", default="_T1w.nii.gz", type=str, help="Suffix of T1 image file."
+    )
+    parser.add_argument(
+        "--device",
+        default="cuda",
+        type=str,
+        help="Device for running the pipeline: [cuda, cpu]",
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", help="Print debugging information."
+    )
+    args = parser.parse_args()
+
+    in_dir = args.in_dir
+    out_dir = args.out_dir
+    t2_suffix = args.T2
+    t1_suffix = args.T1
+    device = args.device
+    verbose = args.verbose
+    max_regist_iter = 5
+    min_regist_dice = 0.9
+
+    # ============ load nn model ============
+    # brain extraction
+    # nn_seg_brain = UNet(
+    #     C_in=1, C_hid=[16,32,32,32,32], C_out=1).to(device)
+    # # ribbon segmentation
+    # nn_seg_ribbon = UNet(
+    #     C_in=1, C_hid=[16,32,64,128,128], C_out=1).to(device)
+    #
+    # nn_seg_brain.load_state_dict(
+    #     torch.load('./seg/model/model_seg_brain.pt', map_location=device))
+    # nn_seg_ribbon.load_state_dict(
+    #     torch.load('./seg/model/model_seg_ribbon.pt', map_location=device))
+
+    # surface reconstruction
+    nn_surf_left_wm = SurfDeform(
+        C_hid=[8, 16, 32, 64, 128, 128], C_in=1, sigma=1.0, device=device
+    )
+    nn_surf_right_wm = SurfDeform(
+        C_hid=[8, 16, 32, 64, 128, 128], C_in=1, sigma=1.0, device=device
+    )
+    # nn_surf_left_pial = SurfDeform(
+    #     C_hid=[8,16,32,32,32,32], C_in=1, sigma=1.0, device=device)
+    # nn_surf_right_pial = SurfDeform(
+    #     C_hid=[8,16,32,32,32,32], C_in=1, sigma=1.0, device=device)
+
+    nn_surf_left_wm.load_state_dict(
+        torch.load("./surface/model/model_hemi-left_wm.pt", map_location=device)
+    )
+    nn_surf_right_wm.load_state_dict(
+        torch.load("./surface/model/model_hemi-right_wm.pt",
+                   map_location=device)
+    )
+    # nn_surf_left_pial.load_state_dict(
+    #     torch.load('./surface/model/model_hemi-left_pial.pt', map_location=device))
+    # nn_surf_right_pial.load_state_dict(
+    #     torch.load('./surface/model/model_hemi-right_pial.pt', map_location=device))
+
+    # spherical projection
+    # nn_sphere_left = SphereDeform(
+    #     C_in=6, C_hid=[32, 64, 128, 256, 256], device=device)
+    # nn_sphere_right = SphereDeform(
+    #     C_in=6, C_hid=[32, 64, 128, 256, 256], device=device)
+    #
+    # nn_sphere_left.load_state_dict(
+    #     torch.load('./sphere/model/model_hemi-left_sphere.pt', map_location=device))
+    # nn_sphere_right.load_state_dict(
+    #     torch.load('./sphere/model/model_hemi-right_sphere.pt', map_location=device))
+
+    # ============ load image atlas ============
+    img_t2_atlas_ants = ants.image_read(
+        "./template/dhcp_week-40_template_T2w.nii.gz")
+    # both ants->nibabel and nibabel->ants need to reload the nifiti file
+    # so here simply load the image again
+    affine_t2_atlas = nib.load(
+        "./template/dhcp_week-40_template_T2w.nii.gz").affine
+
+    # ============ load input surface ============
+    surf_left_in = nib.load("./template/dhcp_week-40_hemi-left_init.surf.gii")
+    vert_left_in = surf_left_in.agg_data("pointset")
+    face_left_in = surf_left_in.agg_data("triangle")
+    vert_left_in = apply_affine_mat(vert_left_in,
+                                    np.linalg.inv(affine_t2_atlas))
+    vert_left_in = vert_left_in - [64, 0, 0]
+    face_left_in = face_left_in[:, [2, 1, 0]]
+    vert_left_in = torch.Tensor(vert_left_in[None]).to(device)
+    face_left_in = torch.LongTensor(face_left_in[None]).to(device)
+
+    surf_right_in = nib.load("./template/dhcp_week-40_hemi-right_init.surf.gii")
+    vert_right_in = surf_right_in.agg_data("pointset")
+    face_right_in = surf_right_in.agg_data("triangle")
+    vert_right_in = apply_affine_mat(vert_right_in,
+                                     np.linalg.inv(affine_t2_atlas))
+    face_right_in = face_right_in[:, [2, 1, 0]]
+    vert_right_in = torch.Tensor(vert_right_in[None]).to(device)
+    face_right_in = torch.LongTensor(face_right_in[None]).to(device)
+
+    # ============ load input sphere ============
+    sphere_left_in = nib.load(
+        "./template/dhcp_week-40_hemi-left_sphere.surf.gii")
+    vert_sphere_left_in = sphere_left_in.agg_data("pointset")
+    vert_sphere_left_in = torch.Tensor(vert_sphere_left_in[None]).to(device)
+
+    sphere_right_in = nib.load(
+        "./template/dhcp_week-40_hemi-right_sphere.surf.gii")
+    vert_sphere_right_in = sphere_right_in.agg_data("pointset")
+    vert_sphere_right_in = torch.Tensor(vert_sphere_right_in[None]).to(device)
+
+    # ============ load template sphere (160k) ============
+    sphere_160k = nib.load("./template/sphere_163842.surf.gii")
+    vert_sphere_160k = sphere_160k.agg_data("pointset")
+    face_160k = sphere_160k.agg_data("triangle")
+    vert_sphere_160k = torch.Tensor(vert_sphere_160k[None]).to(device)
+    face_160k = torch.LongTensor(face_160k[None]).to(device)
+
+    # ============ load pre-computed barycentric coordinates ============
+    # for sphere interpolation
+    barycentric_left = nib.load(
+        "./template/dhcp_week-40_hemi-left_barycentric.gii")
+    bc_coord_left = barycentric_left.agg_data("pointset")
+    face_left_id = barycentric_left.agg_data("triangle")
+
+    barycentric_right = nib.load(
+        "./template/dhcp_week-40_hemi-right_barycentric.gii")
+    bc_coord_right = barycentric_right.agg_data("pointset")
+    face_right_id = barycentric_right.agg_data("triangle")
     subj_list = sorted(glob.glob(in_dir + "*" + t2_suffix))
     for subj_t2_dir in tqdm(subj_list):
         # extract subject id
@@ -400,6 +408,8 @@ if __name__ == "__main__":
                 vol_in = vol_t2_align[:, :, :112]
                 vert_in = vert_right_in
                 face_in = face_right_in
+            else:
+                nn_surf_wm = None
 
             # wm and pial surfaces reconstruction
             with torch.no_grad():
