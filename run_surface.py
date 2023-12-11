@@ -44,18 +44,17 @@ from utils.metric import (
 )
 
 
-
-
 # ============ dHCP DL-based neonatal pipeline ============
 
 
 if __name__ == "__main__":
-
     # ============ load hyperparameters ============
     parser = argparse.ArgumentParser(description="dHCP DL Neonatal Pipeline")
     parser.add_argument(
-        "--in_dir", default="./in_dir/", type=str,
-        help="Diectory containing input images."
+        "--in_dir",
+        default="./in_dir/",
+        type=str,
+        help="Diectory containing input images.",
     )
     parser.add_argument(
         "--out_dir",
@@ -64,9 +63,10 @@ if __name__ == "__main__":
         help="Directory for saving the output of the pipeline.",
     )
     parser.add_argument(
-        "--T2", default="_desc-restore_T2w.nii.gz", type=str, help="Suffix of "
-                                                                  "T2 "
-                                                            "image file."
+        "--T2",
+        default="_desc-restore_T2w.nii.gz",
+        type=str,
+        help="Suffix of " "T2 " "image file.",
     )
     parser.add_argument(
         "--T1", default="_T1w.nii.gz", type=str, help="Suffix of T1 image file."
@@ -120,8 +120,7 @@ if __name__ == "__main__":
         torch.load("./surface/model/model_hemi-left_wm.pt", map_location=device)
     )
     nn_surf_right_wm.load_state_dict(
-        torch.load("./surface/model/model_hemi-right_wm.pt",
-                   map_location=device)
+        torch.load("./surface/model/model_hemi-right_wm.pt", map_location=device)
     )
     # nn_surf_left_pial.load_state_dict(
     #     torch.load('./surface/model/model_hemi-left_pial.pt', map_location=device))
@@ -140,19 +139,16 @@ if __name__ == "__main__":
     #     torch.load('./sphere/model/model_hemi-right_sphere.pt', map_location=device))
 
     # ============ load image atlas ============
-    img_t2_atlas_ants = ants.image_read(
-        "./template/dhcp_week-40_template_T2w.nii.gz")
+    img_t2_atlas_ants = ants.image_read("./template/dhcp_week-40_template_T2w.nii.gz")
     # both ants->nibabel and nibabel->ants need to reload the nifiti file
     # so here simply load the image again
-    affine_t2_atlas = nib.load(
-        "./template/dhcp_week-40_template_T2w.nii.gz").affine
+    affine_t2_atlas = nib.load("./template/dhcp_week-40_template_T2w.nii.gz").affine
 
     # ============ load input surface ============
     surf_left_in = nib.load("./template/dhcp_week-40_hemi-left_init.surf.gii")
     vert_left_in = surf_left_in.agg_data("pointset")
     face_left_in = surf_left_in.agg_data("triangle")
-    vert_left_in = apply_affine_mat(vert_left_in,
-                                    np.linalg.inv(affine_t2_atlas))
+    vert_left_in = apply_affine_mat(vert_left_in, np.linalg.inv(affine_t2_atlas))
     vert_left_in = vert_left_in - [64, 0, 0]
     face_left_in = face_left_in[:, [2, 1, 0]]
     vert_left_in = torch.Tensor(vert_left_in[None]).to(device)
@@ -161,20 +157,17 @@ if __name__ == "__main__":
     surf_right_in = nib.load("./template/dhcp_week-40_hemi-right_init.surf.gii")
     vert_right_in = surf_right_in.agg_data("pointset")
     face_right_in = surf_right_in.agg_data("triangle")
-    vert_right_in = apply_affine_mat(vert_right_in,
-                                     np.linalg.inv(affine_t2_atlas))
+    vert_right_in = apply_affine_mat(vert_right_in, np.linalg.inv(affine_t2_atlas))
     face_right_in = face_right_in[:, [2, 1, 0]]
     vert_right_in = torch.Tensor(vert_right_in[None]).to(device)
     face_right_in = torch.LongTensor(face_right_in[None]).to(device)
 
     # ============ load input sphere ============
-    sphere_left_in = nib.load(
-        "./template/dhcp_week-40_hemi-left_sphere.surf.gii")
+    sphere_left_in = nib.load("./template/dhcp_week-40_hemi-left_sphere.surf.gii")
     vert_sphere_left_in = sphere_left_in.agg_data("pointset")
     vert_sphere_left_in = torch.Tensor(vert_sphere_left_in[None]).to(device)
 
-    sphere_right_in = nib.load(
-        "./template/dhcp_week-40_hemi-right_sphere.surf.gii")
+    sphere_right_in = nib.load("./template/dhcp_week-40_hemi-right_sphere.surf.gii")
     vert_sphere_right_in = sphere_right_in.agg_data("pointset")
     vert_sphere_right_in = torch.Tensor(vert_sphere_right_in[None]).to(device)
 
@@ -187,16 +180,15 @@ if __name__ == "__main__":
 
     # ============ load pre-computed barycentric coordinates ============
     # for sphere interpolation
-    barycentric_left = nib.load(
-        "./template/dhcp_week-40_hemi-left_barycentric.gii")
+    barycentric_left = nib.load("./template/dhcp_week-40_hemi-left_barycentric.gii")
     bc_coord_left = barycentric_left.agg_data("pointset")
     face_left_id = barycentric_left.agg_data("triangle")
 
-    barycentric_right = nib.load(
-        "./template/dhcp_week-40_hemi-right_barycentric.gii")
+    barycentric_right = nib.load("./template/dhcp_week-40_hemi-right_barycentric.gii")
     bc_coord_right = barycentric_right.agg_data("pointset")
     face_right_id = barycentric_right.agg_data("triangle")
-    subj_list = sorted(glob.glob(in_dir + "**" + t2_suffix,recursive=True))
+    subj_list = sorted(
+        glob.glob(os.path.join(in_dir, "**", "*" + t2_suffix), recursive=True) )
     print(subj_list)
     for subj_t2_dir in tqdm(subj_list):
         # extract subject id
@@ -433,7 +425,7 @@ if __name__ == "__main__":
                 vert_wm_orig = vert_wm_align.copy()
                 # vert_pial_orig = vert_pial_align.copy()
             vert_wm_orig = apply_affine_mat(vert_wm_orig, affine_t2_align)
-            #vert_pial_orig = apply_affine_mat(vert_pial_orig, affine_t2_align)
+            # vert_pial_orig = apply_affine_mat(vert_pial_orig, affine_t2_align)
             face_orig = face_align[:, [2, 1, 0]]
             # midthickness surface
             # vert_mid_orig = (vert_wm_orig + vert_pial_orig)/2
