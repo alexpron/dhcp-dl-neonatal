@@ -64,7 +64,8 @@ if __name__ == "__main__":
         help="Directory for saving the output of the pipeline.",
     )
     parser.add_argument(
-        "--T2", default="restore_T2w.nii.gz", type=str, help="Suffix of T2 "
+        "--T2", default="_desc-restore_T2w.nii.gz", type=str, help="Suffix of "
+                                                                  "T2 "
                                                             "image file."
     )
     parser.add_argument(
