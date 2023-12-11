@@ -195,7 +195,7 @@ if __name__ == "__main__":
         "./template/dhcp_week-40_hemi-right_barycentric.gii")
     bc_coord_right = barycentric_right.agg_data("pointset")
     face_right_id = barycentric_right.agg_data("triangle")
-    subj_list = sorted(glob.glob(in_dir + "*" + t2_suffix,recursive=True))
+    subj_list = sorted(glob.glob(in_dir + "**" + t2_suffix,recursive=True))
     print(subj_list)
     for subj_t2_dir in tqdm(subj_list):
         # extract subject id
